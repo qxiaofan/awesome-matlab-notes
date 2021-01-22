@@ -1,16 +1,6 @@
-### 总结使用Matlab进行数据处理的一些小技巧
+### matlab在项目中的常见用法总结
 
-#### 一  绘制2D、3D曲线图demo
-
-- 绘制2d图像
-
-  
-
-- 绘制3d图像
-
-  
-
-#### 二 UWB数据与VSLAM数据进行对齐，且计算距离误差demo
+####　一 UWB数据与VSLAM数据进行对齐，且计算距离误差demo
 
 clc;
 close all;
@@ -209,11 +199,11 @@ for i=1:1:size(uwb_time,1)
 
 
 ​           
-            %dist_(j) = (sl_x_new(j) - ux_filt(i))^2 + (sl_y_new(j) - uy_filt(i))^2;
-                
-            data_align_slam_xy(1,i) = sl_x_new(j);
-            data_align_slam_xy(2,i) = sl_y_new(j);
-            
+​            %dist_(j) = (sl_x_new(j) - ux_filt(i))^2 + (sl_y_new(j) - uy_filt(i))^2;
+​                
+​            data_align_slam_xy(1,i) = sl_x_new(j);
+​            data_align_slam_xy(2,i) = sl_y_new(j);
+​            
             data_align_uwb_xy(1,i) = ux_filt(i) - error_dx;
             data_align_uwb_xy(2,i) = uy_filt(i) - error_dy;
             
