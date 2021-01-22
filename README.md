@@ -16,18 +16,26 @@ clc;
 close all;
 clear all;
 
+R = [0.9994516721827295 0.03311125142827273         0;
+-0.03311125142827273 0.9994516721827295        -0;
+        0        -0         1]
+    
+T = [-8.175637488594226;
+-5.121279414939621;
+-0]
+
 %% read uwb data
-path_uwb = data/1/data_2020_1104_UWB_ceres.txt';
+path_uwb = '1/data_UWB_least_square.txt';
 
 
 fuwb=load(path_uwb);
-uwb_time = (fuwb(:,1)-fuwb(1,1))./1000.;
+%uwb_time = (fuwb(:,1)-fuwb(1,1))./1000.;
+
+uwb_time = fuwb(:,1)./1000.; 
+
 ax_=fuwb(:,2);
 ay_=fuwb(:,3);
 error_ceres_dist = fuwb(:,5);
-
-%figure(1)
-%plot(ax_,ay_,'*y');
 
 figure(2)
 plot(error_ceres_dist,'*b');
@@ -35,6 +43,7 @@ plot(error_ceres_dist,'*b');
 title('最小二乘final_cost分布');
 xlabel('time');
 ylabel('final_cost/m');
+saveas(gcf,'final_cost','png');
 magnify
 
 
@@ -42,8 +51,22 @@ magnify
 %ay_ = fuwb(:,3)/100.0;
 
 %test1, 未对齐， 对齐到vslam坐标系
- ux_filt=ay_-6.24-1.1973-1; %% 
- uy_filt=3.53-ax_-0.9163-1.3;
+%ux_filt=ay_-6.24-1.1973-1; %% 
+%uy_filt=3.53-ax_-0.9163-1.3;
+
+
+ux_filt = zeros(size(ax_,1),1);
+uy_filt = zeros(size(ay_,1),1);
+
+
+ for i = 1:size(ax_,1)
+     uwb_least_square = [ax_(i);ay_(i);0];
+     uwb_in_slam = R*uwb_least_square  + T;
+     ux_filt_temp = uwb_in_slam(1);
+     uy_filt_temp = uwb_in_slam(2);
+     ux_filt(i,1) = ux_filt_temp;
+     uy_filt(i,1) = uy_filt_temp;
+ end;
 
 
 % test2, 已经对齐
@@ -51,14 +74,19 @@ magnify
 %ux_filt=ax_; uy_filt=ay_;
 
 
-
 %% read truth from vslam
 
-path = 'data/1/wheel_encoder.txt';
+path = '1/wheel_encoder.txt';
 wheelF=load(path);
 slam_time_test = wheelF(:,1)./1000.;
 
-slam_time = wheelF(:,1)./1000.+127.7140;%时间戳已经基本对齐
+%slam_time = wheelF(:,1)./1000.
+slam_time = wheelF(:,1)./1000.+1610956445.239;%时间戳已经基本对齐
+
+% figure(222)
+% plot(slam_time,'b-');
+% hold on
+% plot(uwb_time,'r*');
 
 
 s_x = wheelF(:,12);%vslam output x
@@ -66,11 +94,11 @@ s_y = wheelF(:,13);%vslam output y
 sl_z = wheelF(:,14);%vslam output theta
 
 
-sl_x=s_x+0.12*cos(sl_z) + 0.04 * sin(sl_z);
-sl_y=s_y+0.12*sin(sl_z) - 0.04 * cos(sl_z);
+%sl_x=s_x+0.12*cos(sl_z) + 0.04 * sin(sl_z);
+%sl_y=s_y+0.12*sin(sl_z) - 0.04 * cos(sl_z);
 
-%sl_x=s_x+0.1*cos(sl_z) + 0.04 * sin(sl_z);
-%sl_y=s_y+0.1*sin(sl_z) - 0.04 * sin(sl_z);
+sl_x=s_x+0.12*cos(sl_z) + 0.04 * sin(sl_z);
+sl_y=s_y+0.12*sin(sl_z) - 0.04 * sin(sl_z);
 %sl_x = s_x;
 %sl_y = s_y;
 
@@ -84,6 +112,7 @@ plot(sl_x,sl_y,'*r')
 xlabel('X/m')
 ylabel('Y/m')
 title('vslam和UWB_filtered轨迹粗对齐');
+saveas(gcf,'uwb_vslam_rude_aligned','png');
 legend('show')
 
 
@@ -151,79 +180,36 @@ for k = 1:size(sl_x,1)-1
    slam_time_new(2*k) = slam_time_interpolation(k);
 end
 
-figure(5)
-plot(sl_x,'k*');
-hold on
-plot(sl_x_interpolation,'m*');
-hold on
-plot(sl_x_new,'g*');
-title('对vslam数据X方向进行插补');
-xlabel('time');
-ylabel('X/m');
-legend('x','X-插补','X-插补后结果');
-magnify
-
-
-figure(6)
-plot(sl_y,'k*');
-hold on
-plot(sl_y_interpolation,'m*');
-hold on
-plot(sl_y_new,'g*');
-magnify
-
-title('对vslam数据Y方向进行插补');
-xlabel('time');
-ylabel('Y/m');
-legend('Y','Y-插补','Y-插补后结果');
-
-figure(7)
-plot(slam_time,'k*');
-hold on 
-plot(slam_time_interpolation,'m*');
-hold on
-plot(slam_time_new,'g*');
-hold off;
-
 data_ceres_error_slam = zeros(2,size(sl_x_new,1));
 
 data_align_slam_xy = zeros(2,size(sl_x_new,1));
 data_align_uwb_xy = zeros(2,size(sl_x_new,1));
 
 
-last_j=200;
-dist_=0;
+last_j=100;
+dist_MAE = 0;
+dist_RMSE = 0;
 %figure(3)
 %plot(ux_filt-error_dx,uy_filt-error_dy,'*m');
 
 % 时间戳未做插补时求距离
-% for i=1:1:5000
-%     for j=last_j:1:size(sl_x,1)-2
-%         if  j <= length(slam_time) && slam_time(j) > (uwb_time(i) - 0)
-%             
-%             dist_(j)=sqrt((sl_x(j)-ux_filt(i)+error_dx)^2+(sl_y(j)-uy_filt(i)+error_dy)^2);
-%                 
-%             data_align_slam_xy(1,i) = sl_x(j);
-%             data_align_slam_xy(2,i) = sl_y(j);
-%             
-%             data_align_uwb_xy(1,i) = ux_filt(i) - error_dx;
-%             data_align_uwb_xy(2,i) = uy_filt(i) - error_dy;
-%             
-%             data_ceres_error_slam(1,i) = dist_(j);
-%             
-%             data_ceres_error_slam(2,i) = error_ceres_dist(i);
-%             
-%             break;
-%         end
-%     end
-% end
 
 %%对vslam数据的时间戳进行了中间取平均插补
+num = 0;
 for i=1:1:size(uwb_time,1)
     for j=last_j:1:size(sl_x_new,2)-2
         if  j <= length(slam_time_new) && slam_time_new(j) > (uwb_time(i) - 0)
-            
-            dist_(j)=sqrt((sl_x_new(j)-ux_filt(i)+error_dx)^2+(sl_y_new(j)-uy_filt(i)+error_dy)^2);
+
+           num = num + 1;
+            dist_MAE(j)=sqrt((sl_x_new(j)-ux_filt(i)+error_dx)^2 + abs(sl_y_new(j)-uy_filt(i)+error_dy)^2);
+            dist_RMSE(j) = (sl_x_new(j) - ux_filt(i)+error_dx)^2 + (sl_y_new(j)-uy_filt(i)+error_dy)^2;
+           
+            %dist_MAE(j)=sqrt((sl_x_new(j)-ux_filt(i))^2 + abs(sl_y_new(j)-uy_filt(i)^2));
+            %dist_RMSE(j) = (sl_x_new(j) - ux_filt(i))^2 + (sl_y_new(j)-uy_filt(i))^2;
+
+
+​           
+            %dist_(j) = (sl_x_new(j) - ux_filt(i))^2 + (sl_y_new(j) - uy_filt(i))^2;
                 
             data_align_slam_xy(1,i) = sl_x_new(j);
             data_align_slam_xy(2,i) = sl_y_new(j);
@@ -231,7 +217,7 @@ for i=1:1:size(uwb_time,1)
             data_align_uwb_xy(1,i) = ux_filt(i) - error_dx;
             data_align_uwb_xy(2,i) = uy_filt(i) - error_dy;
             
-            data_ceres_error_slam(1,i) = dist_(j);
+            data_ceres_error_slam(1,i) = dist_MAE(j);
             
             data_ceres_error_slam(2,i) = error_ceres_dist(i);
             
@@ -263,6 +249,7 @@ title('在X方向上对vslam与uwb数据对齐');
 xlabel('time');
 ylabel('X/m');
 legend('插补后的VSLAM','UWB数据');
+saveas(gcf,'x_aligned','png');
 
 
 figure(10)
@@ -275,13 +262,21 @@ title('在Y方向上对vslam与uwb数据对齐');
 xlabel('time');
 ylabel('Y/m');
 legend('插补后的VSLAM','UWB数据');
+saveas(gcf,'y_aligned','png');
 
 nonzeroCnt = 0;
-for i = 1:1:length(dist_)
-    if(abs(dist_(i)) > 0.0001)
+for i = 1:1:length(dist_MAE)
+    if(abs(dist_MAE(i)) > 0.0001)
         nonzeroCnt =nonzeroCnt + 1;
     end
 end
-error_distance = sum(dist_)/nonzeroCnt % 平均距离偏差
+nonzeroCnt
+size(dist_MAE,2)
+size(dist_RMSE,2)
+num
+
+error_distance_MAE = sum(dist_MAE)/num % 平均距离偏差
+
+error_distance_RMSE = sqrt(sum(dist_RMSE)/num) %RMSE
 
 持续完善中....
